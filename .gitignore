@@ -1,3 +1,8 @@
+# data files
+*.npy
+*.tar.gz
+*.h5
+
 # npds
 npds/
 
