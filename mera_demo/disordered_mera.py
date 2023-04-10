@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 23 15:37:15 2023
+
+@author: matthewthibodeau
+"""
 # -*- coding: utf-8 -*-
 """
 Created on Mon Sep 12 13:28:31 2022
@@ -57,6 +64,19 @@ def loss_energy(mera, terms, **kwargs):
         for where in terms
     )
 
+def mera_lowest_connector_uni(mera, site1, site2):
+    # mera.draw_tree_span()
+    connector = mera.select([site1, site2])
+    tags = connector.tags
+    minlayer = min([int(x[-1]) for x in tags if '_LAYER' in x])
+    # could be off by 1
+    
+    minunilist = connector.select(['_LAYER' + str(minlayer), '_UNI']).tensors
+    if len(minunilist) == 0:
+        minunilist = connector.select(['_LAYER' + str(minlayer+1), '_UNI']).tensors
+    minuni = minunilist[0]
+    
+
 opt = ctg.ReusableHyperOptimizer(
     progbar=True,
     reconf_opts={},
@@ -76,59 +96,52 @@ xD = 5
 # use single precision for quick GPU optimization
 dtype = 'float32'
 
-mera = qtn.MERA.rand(L, max_bond=mD, dtype=dtype)
+# start with a bond dimension of 2
+mera = qtn.MERA.rand(L, max_bond=2, dtype=dtype)
 
 # this is the function that projects all tensors
 # with ``left_inds`` into unitary / isometric form
 mera.unitize_()
 
-fix = {
-    f'k{i}': (sin(2 * pi * i / L), cos(2 * pi * i / L))
-    for i in range(L)
-}
-
-# reduce the 'spring constant' k as well
-draw_opts = dict(fix=fix, k=0.01)
-# mera.draw(color=['I0', 'I40'], **draw_opts)
+disorder_strength = 0.5
+j0 = 1
+coupling_vals = np.random.normal(j0, disorder_strength, L)
 
 H2 = qu.ham_heis(2).real.astype(dtype)
-terms = {(i, (i + 1) % L): H2 for i in range(L)}
+terms = {((i - 1) % L, i): coupling_vals[i] * H2 for i in range(L)}
 
-Htotal = qtn.MPO_ham_heis(L, cyclic = True)
+builder = qtn.SpinHam1D(S=1/2, cyclic=True)
+for i in range(1, L):
+    builder[i-1, i] += coupling_vals[i], 'X', 'X'
+    builder[i-1, i] += coupling_vals[i], 'Y', 'Y'
+    builder[i-1, i] += coupling_vals[i], 'Z', 'Z'
+    
+builder[L, L+1] += coupling_vals[0], 'X', 'X'
+builder[L, L+1] += coupling_vals[0], 'Y', 'Y'
+builder[L, L+1] += coupling_vals[0], 'Z', 'Z'
 
-x = qtn.MPS_rand_state(L, xD, cyclic=False, dtype=dtype)
+Htotal = builder.build_mpo(L)
+
+x = qtn.MPS_rand_state(L, xD, cyclic=True, dtype=dtype)
 x.compress()
-xH = x.H
-
-tnopt = qtn.TNOptimizer(
-    mera,
-    loss_fn=loss_fn,
-    norm_fn=norm_fn,
-    loss_constants={'ref': xH},
-    loss_kwargs={'optimize': opt},
-    autodiff_backend='torch', jit_fn=True,
-)
-tnopt.optimizer = 'l-bfgs-b'  # the default
-mo = tnopt.optimize(1)
-
-eopt = qtn.TNOptimizer(
-    mera,
-    loss_fn=loss_energy,
-    norm_fn=norm_fn,
-    loss_constants={'terms': terms},
-    loss_kwargs={'optimize': opt},
-    autodiff_backend='torch', jit_fn=True,
-)
-eopt.optimizer = 'l-bfgs-b'  # the default
-emo = eopt.optimize(1)
-# loss_fn(mera, xH, opt)
-
-energy_tol = 1e-6
-dmrg = qtn.DMRG2(Htotal, bond_dims = [5, 6, 7, 8, 9, 10])
-succ = dmrg.solve(energy_tol, max_sweeps = 10, sweep_sequence = 'RL', verbosity = 1)
-edmrg = dmrg.energy
 
 
+# do the renormalization to get singlets
+def singletize_H(Htotal):
+    ...
+    # returns a list of singlet indices [..., (left, right) ,...]
 
+singlets = singletize_H(Htotal)
+
+# now expand the bond dimensions of the mera
+for left, right in singlets:
+    minuni = mera_lowest_connector_uni(mera, left, right)
+    unisize = minuni.shape[0]
+    inds = minuni.inds
+    mera.expand_bond_dimension(unisize + 1, rand_strength = 1.0, 
+                               inds_to_expand=minuni.inds, inplace=True)
+    # for k in range(len(inds)):
+    #     # len should be 4
+    #     mera.expand_bond_dimension(minuni)
 
 

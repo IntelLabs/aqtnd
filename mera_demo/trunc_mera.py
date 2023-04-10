@@ -13,7 +13,7 @@ import quimb.tensor as qtn
 
 class TruncMERA(qtn.TensorNetwork):
 
-    def __init__(self, L_lower, L_upper, mera,
+    def __init__(self, L_lower, L_upper, mera = None, gen_max_bond = None,
                  lower_site_ind_id = 'k{}', upper_site_ind_id = 'l{}'):
 
         # mera = qtn.MERA(L_lower, uni = uni, iso = iso, phys_dim = phys_dim, dangle = dangle,
@@ -21,6 +21,12 @@ class TruncMERA(qtn.TensorNetwork):
 
         n_layers = round(log2(L_lower) - log2(L_upper))
         layertags = [f'_LAYER{j}' for j in range(n_layers)]
+        
+        if mera is None:
+            if gen_max_bond is None:
+                raise ValueError('gen_max_bond must be a positive integer' \
+                                 'if mera is not supplied')
+            mera = qtn.MERA.rand(L_lower, max_bond=gen_max_bond)
 
         super().__init__(mera.select(layertags, which='any'))
 
