@@ -25,7 +25,8 @@ opt = ctg.ReusableHyperOptimizer(
 def norm_fn(mera):
     # there are a few methods to do the projection
     # exp works well for optimization
-    return mera.unitize(method='exp')
+    x =  mera.unitize(method='exp')
+    return x/np.sqrt(x @ x.H)
 
 def local_expectation(mera, terms, where, optimize='auto-hq'):
     """Compute the energy for a single local term.
@@ -56,6 +57,11 @@ def loss_energy(mera, terms, **kwargs):
         local_expectation(mera, terms, where, **kwargs)
         for where in terms
     )
+
+
+
+
+
 
 opt = ctg.ReusableHyperOptimizer(
     progbar=True,
@@ -109,7 +115,7 @@ tnopt = qtn.TNOptimizer(
     autodiff_backend='torch', jit_fn=True,
 )
 tnopt.optimizer = 'l-bfgs-b'  # the default
-mo = tnopt.optimize(1)
+# mo = tnopt.optimize(1)
 
 eopt = qtn.TNOptimizer(
     mera,
@@ -121,12 +127,18 @@ eopt = qtn.TNOptimizer(
 )
 eopt.optimizer = 'l-bfgs-b'  # the default
 emo = eopt.optimize(1)
+
+
 # loss_fn(mera, xH, opt)
 
-energy_tol = 1e-6
-dmrg = qtn.DMRG2(Htotal, bond_dims = [5, 6, 7, 8, 9, 10])
-succ = dmrg.solve(energy_tol, max_sweeps = 10, sweep_sequence = 'RL', verbosity = 1)
-edmrg = dmrg.energy
+# energy_tol = 1e-6
+# dmrg = qtn.DMRG2(Htotal, bond_dims = [5, 6, 7, 8, 9, 10])
+# succ = dmrg.solve(energy_tol, max_sweeps = 10, sweep_sequence = 'RL', verbosity = 1)
+# edmrg = dmrg.energy
+
+
+
+
 
 
 
